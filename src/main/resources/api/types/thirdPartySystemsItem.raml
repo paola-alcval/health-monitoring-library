@@ -1,0 +1,14 @@
+#%RAML 1.0 DataType
+
+properties:
+  status:
+    enum: [UP, DOWN]
+    required: true
+    example: DOWN
+  name: 
+    type: string
+    required: true
+    example: test-database-existing
+  error?:
+    type: string
+    example: ERROR

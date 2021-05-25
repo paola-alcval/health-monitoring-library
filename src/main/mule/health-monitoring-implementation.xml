@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:java="http://www.mulesoft.org/schema/mule/java" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+  xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/java http://www.mulesoft.org/schema/mule/java/current/mule-java.xsd">
+  <sub-flow name="api-health-applicationFlow" doc:id="4fcd7d20-d4ed-44e2-a0a8-80590463e0d0" >
+    <ee:transform doc:name="application details" doc:id="4ff70d73-96b1-4077-91f6-9108bd51d3b8">
+      <ee:message>
+        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  apiName: app.name,
+  apiVersion: p("apiVersion") default "",
+  env: p("env") default "",
+  runtimeVersion: mule.version,
+  startDate: ((app.muleContext.startDate default now()) as DateTime {unit: "milliseconds"}),
+  timeZone: server.timeZone,
+  traceId: correlationId,
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <logger level="INFO" doc:name="Log end" doc:id="9cc80732-7395-441c-8860-f0975681dc9e" message='#["Getting application details " ++ (correlationId default "")]' />
+  </sub-flow>
+  <sub-flow name="api-health-serverFlow" doc:id="d7c7a071-eab5-4b51-892e-c69226f75ce4" >
+    <flow-ref doc:name="java-invoke" doc:id="88d2b845-28d4-4ab7-a48f-475835916315" name="java-invoke-subFlow" target="serverDetails"/>
+    <flow-ref doc:name="applicationDetails" doc:id="97954d61-ca7b-45e9-873c-b708230b7ae5" name="api-health-applicationFlow" target="applicationDetails"/>
+    <ee:transform doc:name="server details" doc:id="e8571ff0-1977-411c-bec7-228a1c07ff10" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+vars.applicationDetails ++ vars.serverDetails]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <logger level="INFO" doc:name="Log end" doc:id="676d7149-f516-4741-b68d-dd0892a63fae" message='#["Getting server details " ++ (correlationId default "")]'/>
+  </sub-flow>
+  <sub-flow name="java-invoke-subFlow" doc:id="80f35f43-d32a-4ec8-a8f6-b5cb90a5c0d0" >
+    <java:invoke-static doc:name="HeapMemoryDetailsOperation" doc:id="f6380277-75b2-4370-b2f3-53da1497d511" class="com.details.operations.HeapMemoryDetailsOperation" method="heapMemoryDetails()" target="heapMemory" />
+    <java:invoke-static doc:name="GarbageCollectionDetailsOperation" doc:id="13cc5498-a333-4c64-a873-ea60f4a84d10" target="garbageCollection" class="com.details.operations.GarbageCollectionDetailsOperation" method="garbageCollection()" />
+    <java:invoke-static doc:name="ThreadDetailsOperation" doc:id="db412c0c-1cdf-4c7c-8e6c-3e0035fc4ea1" class="com.details.operations.ThreadDetailsOperation" method="threadInformation()" target="threadsInformation" />
+    <ee:transform doc:name="map java results" doc:id="bc32f02a-22f1-4d12-b03e-13e97521d282" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+  heapMemory: vars.heapMemory,
+  garbageCollection: vars.garbageCollection,
+  threadsInformation: vars.threadsInformation
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </sub-flow>
+  <sub-flow name="api-health-thirdPartyFlow" doc:id="8e0205cf-da57-441e-aa50-383bdfab3799" >
+    <flow-ref doc:name="third-party-invoke" doc:id="d7f53995-f4d9-4279-9ed8-413bc054d800" name="third-party-invoke-subFlow" target="thirdPartyDetails"/>
+    <flow-ref doc:name="applicationDetails" doc:id="8dfd8076-783c-47b5-b938-d6b056f161d7" name="api-health-applicationFlow" target="applicationDetails" />
+    <ee:transform doc:name="thirdParty details" doc:id="99ce53a9-67f1-4bf8-a54c-1f5628d0ca17" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+vars.applicationDetails ++ vars.thirdPartyDetails]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <logger level="INFO" doc:name="Log end" doc:id="0c211a89-4d39-4f2c-93a2-c0cbf3485c0e" message='#["Getting third party system details " ++ (correlationId default "")]'/>
+  </sub-flow>
+  <sub-flow name="third-party-invoke-subFlow" doc:id="c1c6607f-0f40-470c-bb44-1750a45ddd3d" >
+    <parallel-foreach doc:name="Parallel For Each" doc:id="df66917f-5769-4561-9784-9a93f5623de3" collection="#[if(!isEmpty(p('thirdPartyFlows'))) (p('thirdPartyFlows') splitBy &quot;,&quot;) else []]">
+      <try doc:name="Try" doc:id="16d18262-daf2-4110-ae71-9dc028b360cc" >
+        <set-variable value="#[payload]" doc:name="Set FlowName" doc:id="06e59e5f-fb16-48aa-90de-ab82e4a79879" variableName="flowName"/>
+        <flow-ref doc:name="Call third party services" doc:id="84a4fa02-882a-4bb5-8743-31bb5d7f8feb" name="#[vars.flowName]" />
+        <ee:transform doc:name="Success Body" doc:id="930b39d3-6b00-4e90-b550-fdff82141f5b" >
+          <ee:message >
+            <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+  "status": "UP",
+  "name": vars.flowName
+}]]></ee:set-payload>
+          </ee:message>
+        </ee:transform>
+        <error-handler >
+          <on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="212f93e2-6537-4db5-89fd-75357e1c7b79" >
+            <ee:transform doc:name="Fail Body" doc:id="0425f174-3986-4342-a545-482aecb40224">
+      <ee:message>
+        <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+  "status": "DOWN",
+  "name": payload,
+  "error": error.description
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </parallel-foreach>
+    <ee:transform doc:name="map third party results" doc:id="934c5106-06d8-444e-8957-5c5ed2ae6a3a" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+  thirdPartySystems: payload..payload
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </sub-flow>
+  <sub-flow name="health-monitoring-generalFlow" doc:id="f74fcb3c-d2fd-447e-bcfe-7b96f6b10511" >
+    <flow-ref doc:name="applicationDetails" doc:id="9311eb32-4b8e-45d7-ba27-b084cbf8d3ee" name="api-health-applicationFlow" target="applicationDetails"/>
+    <flow-ref doc:name="serverDetails" doc:id="3eef01cd-8043-4a69-bc5c-0c9dd4b1e1f1" name="java-invoke-subFlow" target="serverDetails"/>
+    <flow-ref doc:name="thirdPartyDetails" doc:id="ed47c106-1a0b-4565-b6ef-daab6bdddd38" name="third-party-invoke-subFlow" target="thirdPartyDetails"/>
+    <ee:transform doc:name="Transform Message" doc:id="6382b33c-8325-4be1-84ad-eb1ecea4734b" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+vars.applicationDetails ++ vars.serverDetails ++ vars.thirdPartyDetails
+]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <logger level="INFO" doc:name="Log end" doc:id="92e72049-7500-4ef8-832a-ca2fc66334b3" message='#["Getting general details " ++ (correlationId default "")]'/>
+  </sub-flow>
+</mule>

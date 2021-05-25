@@ -1,0 +1,46 @@
+#%RAML 1.0
+title: health-monitoring-library
+version: v1
+
+
+types:
+  application: !include types/applicationType.raml
+  server: !include types/serverType.raml
+  thirdParty: !include types/thirdPartyType.raml
+  general: !include types/generalType.raml
+  
+
+/health:
+
+  /application:
+    get:
+      responses:
+        200:
+          body:
+            application/json:
+              type: application
+
+  /server:
+    get:
+      responses:
+        200:
+          body:
+            application/json:
+              type: server
+  
+  /thirdParty:
+    get:
+      responses:
+        200:
+          body:
+            application/json:
+              type: thirdParty
+
+  /general:
+    get:
+      responses:
+        200:
+          body:
+            application/json:
+              type: general
+  
